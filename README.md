@@ -1,6 +1,8 @@
-# Hello World on AWS
+# Hello World on AWS (EC2 with Full CI/CD)
 
-This is a simple "Hello World" project deployed on **AWS (Amazon Web Services)** using the **App Runner** service. It's part of a university assignment to demonstrate cloud service models.
+This is a "Hello World" project deployed on **AWS EC2** as part of a university assignment on Cloud Providers and Service Models.
+
+The primary goal of this repository is to demonstrate a fully automated **CI/CD (Continuous Integration / Continuous Deployment)** pipeline. Any change pushed to the `main` branch will automatically trigger a GitHub Action to build a new Docker image, push it to Docker Hub, and redeploy the application on the EC2 server.
 
 ## 👥 Team Members
 
@@ -13,45 +15,89 @@ This is a simple "Hello World" project deployed on **AWS (Amazon Web Services)**
 
 ## 🚀 Live Demo
 
-**Live URL:** `(Paste your AWS App Runner URL here after you deploy)`
+The application is running live and is publicly accessible at our static IP address.
 
-**Screenshot:**
-`![My Deployed App](httpsEntry - The image you provided shows 11 GitHub repositories, each named `hello-world-[provider]`, which aligns perfectly with your project requirements.
+**Public URL:** **[http://54.144.216.159](http://54.144.216.159)**
 
-- **image_e0ca96.png:** Shows the qualification rank table.
-- **image_e15632.png:** Shows the list of 11 repositories you created.
+## Technology Stack
 
-**You have done the following:**
+- **Cloud Provider:** AWS (Amazon Web Services)
+- **Service:** EC2 (Elastic Compute Cloud) with an Elastic IP
+- **Containerization:** Docker
+- **Web Server:** Nginx
+- **CI/CD:** GitHub Actions
+- **Image Registry:** Docker Hub
 
-1.  **Understood the project:** You need to deploy a "Hello World" app to 11 different cloud providers.
-2.  **Analyzed the rubric:** You know you need a `Dockerfile`, a DockerHub image, and a functional deployment for at least 8 providers.
-3.  **Set up your repositories:** You have already created all 11 repositories on GitHub.
+---
 
-**You are asking:**
-You are now in the `hello-world-base-template` repository, which you've just cloned, and it's empty. You have 5 files (`Dockerfile`, `index.html`, `README.md`, `script.js`, `style.css`) that are "untracked" (marked with a `U`). You want to save these 5 files into this `hello-world-base-template` repository on GitHub.
+## Automated CI/CD Pipeline
 
-**My next step:**
-I need to tell you the Git commands to add, commit (using the conventional commit style you requested), and push these 5 untracked files to your GitHub repository.
+This project is 100% automated. The `.github/workflows/deploy.yml` file defines the entire process, which runs on every push to `main`:
 
-**Plan:**
+### Job 1: `build-and-push`
 
-1.  Acknowledge that the user has correctly set up the template files locally.
-2.  Explain that the `U` means "untracked" and that they need to be added to Git.
-3.  Provide the three Git commands to:
-    - `git add .` (to stage all 5 files)
-    - `git commit -m "feat: add initial project template files"` (using the conventional commit format they requested)
-    - `git push` (to send the files to GitHub)
-4.  Confirm that after this, their `hello-world-base-template` will be ready to be used for the other 11 repos.
-    ¡Excelente! Estás en el punto exacto.
+1.  The workflow checks out the repository's code.
+2.  It logs into Docker Hub using secrets.
+3.  It builds the `Dockerfile` into a new image.
+4.  It pushes the new image to our Docker Hub registry with the `latest` tag.
 
-Esa `U` al lado de tus archivos significa _Untracked_ (Sin seguimiento). Has puesto los 5 archivos de la plantilla en la carpeta, pero Git aún no sabe que debe guardarlos.
+### Job 2: `deploy-to-ec2`
 
-Para guardarlos en tu repositorio de GitHub `hello-world-base-template`, solo necesitas ejecutar los 3 comandos de Git en esa terminal:
+1.  This job waits for `build-and-push` to succeed.
+2.  It securely connects to our AWS EC2 instance using SSH (via stored secrets).
+3.  Once connected, it runs a script _inside_ the server to:
+    a. Pull the new `latest` image from Docker Hub.
+    b. Stop the container that is currently running.
+    c. Remove the old container.
+    d. Start a new container from the new image, mapping port 80.
 
-### 1. Añadir los archivos (Stage)
+This ensures the server is always running the most recent version of the code with no manual intervention.
 
-Esto le dice a Git: "Quiero incluir todos estos archivos nuevos en mi próximo 'guardado'".
+---
 
-```bash
-git add .
-```
+## Run Locally with Docker
+
+You can run this project on your own machine using our published Docker Hub image.
+
+1.  **Prerequisite:** You must have [Docker](https://www.docker.com/products/docker-desktop/) installed in your PC.
+
+2.  **Pull the image** from Docker Hub:
+
+    ```bash
+    docker pull cristianp970/hello-world-aws:latest
+    ```
+
+3.  **Run the container:**
+    _(This command maps your local port 8080 to the container's port 80)_
+
+    ```bash
+    docker run -d -p 8080:80 --name hello-aws-local cristianp970/hello-world-aws:latest
+    ```
+
+4.  **View the project:**
+    Open your browser and go to **[http://localhost:8080](http://localhost:8080)**.
+
+---
+
+## How to Replicate this Setup
+
+To fork this repository and create your own automated pipeline, you would need to:
+
+1.  **Fork this repository.**
+2.  **Create an AWS EC2 Instance:**
+    - Launch a `t2.micro` (Free Tier) instance with an Amazon Linux 2 AMI.
+    - Create and download a new `.pem` key pair.
+    - **Install Docker** on the instance manually (using `sudo yum install docker -y`).
+3.  **Configure AWS Security Group:**
+    - Open **Port 22 (SSH)** to your IP address (for testing) and later to GitHub Actions.
+    - Open **Port 80 (HTTP)** to `0.0.0.0/0` (Anywhere) so the public can see the website.
+4.  **Assign an Elastic IP:**
+    - Allocate a new Elastic IP address in the EC2 console.
+    - Associate this new IP with your instance.
+5.  **Create Repository Secrets:**
+    - In your forked repository's settings (`Settings > Secrets and variables > Actions`), add the following 5 secrets:
+    - `DOCKERHUB_USERNAME`: Your Docker Hub username.
+    - `DOCKERHUB_TOKEN`: A Docker Hub Access Token.
+    - `EC2_HOST_IP`: The static Elastic IP from step 4 (e.g., `54.144.216.159`).
+    - `EC2_USERNAME`: The username for your instance (e.g., `ec2-user` for Amazon Linux).
+    - `EC2_PRIVATE_KEY`: The full text content of the `.pem` key file you downloaded in step 2.
