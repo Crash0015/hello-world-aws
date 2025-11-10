@@ -30,27 +30,23 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKORHUB_USERNAME }}/hello-world-aws:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/hello-world-aws:latest
 
   # -----------------------------------------------
   # JOB 2: Deploy the new image to the EC2 server
   # -----------------------------------------------
   deploy-to-ec2:
-    # This job 'needs' (waits for) 'build-and-push' to finish
     needs: build-and-push
     runs-on: ubuntu-latest
 
     steps:
       - name: Deploy to EC2 instance
-        # This action logs into your server using your secrets
         uses: appleboy/ssh-action@v1.0.3
         with:
-          # The 3 EC2 secrets you just added
           host: ${{ secrets.EC2_HOST_IP }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_PRIVATE_KEY }}
 
-          # The script to run INSIDE your EC2 server
           script: |
             # 1. Pull the new image from DockerHub
             sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/hello-world-aws:latest
@@ -63,5 +59,4 @@ jobs:
             fi
 
             # 4. Run the new container with the fresh image
-            # We give it a name ('--name') so we can find it next time
             sudo docker run -d --name hello-world-app -p 80:80 ${{ secrets.DOCKERHUB_USERNAME }}/hello-world-aws:latest
