@@ -1,45 +1,67 @@
-# A name for this GitHub Actions workflow, shown in the "Actions" tab
-name: Build and Push to Docker Hub (AWS)
+name: Build, Push to DockerHub, and Deploy to EC2
 
-# This tells GitHub to run the workflow automatically
-# every time you 'push' code to the 'main' branch
 on:
   push:
     branches:
       - main
 
-# 'jobs' defines what tasks to run
 jobs:
+  # -----------------------------------------------
+  # JOB 1: Build and Push the image to DockerHub
+  # -----------------------------------------------
   build-and-push:
-    # 'runs-on' specifies the virtual machine to use (a standard Ubuntu)
     runs-on: ubuntu-latest
 
-    # 'steps' are the individual commands to run
     steps:
-      # Step 1: Check out your repository's code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Docker Buildx, a modern tool for building images
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Step 3: Log in to Docker Hub
-      # This uses the 'secrets' you created in your GitHub repository settings
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Step 4: Build your Dockerfile and push the image to Docker Hub
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          # 'context: .' tells Docker to find the Dockerfile in the root folder
           context: .
-          # 'push: true' tells it to upload the image after building
           push: true
-          # 'tags:' sets the name and tag for your image in Docker Hub
-          # This will be your-username/hello-world-aws:latest
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/hello-world-aws:latest
+          tags: ${{ secrets.DOCKORHUB_USERNAME }}/hello-world-aws:latest
+
+  # -----------------------------------------------
+  # JOB 2: Deploy the new image to the EC2 server
+  # -----------------------------------------------
+  deploy-to-ec2:
+    # This job 'needs' (waits for) 'build-and-push' to finish
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2 instance
+        # This action logs into your server using your secrets
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # The 3 EC2 secrets you just added
+          host: ${{ secrets.EC2_HOST_IP }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_PRIVATE_KEY }}
+
+          # The script to run INSIDE your EC2 server
+          script: |
+            # 1. Pull the new image from DockerHub
+            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/hello-world-aws:latest
+
+            # 2. Check if a container named 'hello-world-app' is already running
+            if [ "$(sudo docker ps -q -f name=hello-world-app)" ]; then
+                # 3. If it exists, stop and remove it
+                sudo docker stop hello-world-app
+                sudo docker rm hello-world-app
+            fi
+
+            # 4. Run the new container with the fresh image
+            # We give it a name ('--name') so we can find it next time
+            sudo docker run -d --name hello-world-app -p 80:80 ${{ secrets.DOCKERHUB_USERNAME }}/hello-world-aws:latest
